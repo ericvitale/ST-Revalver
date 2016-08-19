@@ -1,6 +1,9 @@
 /**
  *  Revalver
  *
+ *  Version 1.0.1 - 08/19/16
+ *   -- Added: Schedule Trigger
+ *   -- Added: Toggle Trigger
  *  Version 1.0.0 - 08/17/16
  *   -- Initial Build
  *
@@ -55,7 +58,7 @@ def childStartPage() {
 	return dynamicPage(name: "childStartPage", title: "", install: true, uninstall: true) {
         
         section("Trigger Type") {
-        	input "triggerType", "enum", title: "Trigger Type", required: true, multiple: false, options: ["Contact", "Schedule", "Switch", "Water Sensor"], submitOnChange: true
+        	input "triggerType", "enum", title: "Trigger Type", required: true, multiple: false, options: ["Contact", "Schedule", "Switch", "Toggle", "Water Sensor"], submitOnChange: true
         }
         
         if(triggerType == "Water Sensor") {
@@ -66,19 +69,35 @@ def childStartPage() {
             section("Trigger") {
                 input "switches", "capability.switch", title: "Switches", multiple: true, required: false, submitOnChange: true
                 if(switches != null) {
-                    input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: ["On", "Off", "Never"], defaultValue: "On"
-                    input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: ["On", "Off", "Never"], defaultValue: "Never"
+                    input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: getCloseEvents(), defaultValue: "On", submitOnChange: true
+                    if(closeEvent == "Timer") {
+                    	input "closeTimerLength", "number", title: "Close After?", required: true, range: "1..*"
+                        input "closeTimerUnit", "enum", title: "Unit?", required: true, options: getTimeUnits(), defaultValue: "Minutes"
+                    }
+                    input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: getOpenEvents(), defaultValue: "Never", submitOnChange: true
+                    if(openEvent == "Timer") {
+                    	input "openTimerLength", "number", title: "Open After?", required: true, range: "1..*"
+                        input "openTimerUnit", "enum", title: "Unit?", required: true, options: getTimeUnits(), defaultValue: "Minutes"
+                    }
                 }
             }
         } else if(triggerType == "Schedule") {
-        	//ToDo
+        	section("Schedule") {
+            	input "closeTime", "time", title: "Close daily at?", required: false
+                input "openTime", "time", title: "Open daily at?", required: false
+            }
         } else if(triggerType == "Contact") {
         	section("Contact Sensor Subscriptions") {
             	input "contacts", "capability.contactSensor", title: "Which?", required: false, multiple: true, submitOnChange: true
                 if(contacts != null) {
-            		input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: ["Open", "Closed", "Never"], defaultValue: "Open"
-                	input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: ["Open", "Closed", "Never"], defaultValue: "Never"
+            		input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: getCloseEvents(), defaultValue: "Open"
+                	input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: getOpenEvents(), defaultValue: "Never"
                 }
+            }
+        } else if(triggerType == "Toggle") {
+        	section("Toggle") {
+        		input "toggleTimerLength", "number", title: "Toggle Every?", required: true, range: "1..*"
+            	input "toggleTimerUnit", "enum", title: "Unit?", required: true, options: getToggleTimeUnits(), defaultValue: "Minutes"
             }
         }
         
@@ -100,7 +119,7 @@ def childStartPage() {
         section("Test This Automation") {
         	input "testAutomation", "bool", title: "Test This Automation?", required: true, defaultValue: false, submitOnChange: true
             if(testAutomation) {
-            	input "testLights", "capability.switch", title: "Which?", required: false, multiple: true
+            	input "testLights", "capability.switch", title: "Which Light?", required: false, multiple: true
             }
         }
         
@@ -179,6 +198,50 @@ def updated() {
 def initialization() {
 	log("Begin initialization().", "DEBUG")
     
+    log("triggerType = ${triggerType}.", "INFO")
+    if(closeEvent != null) {
+    	log("closeEvent = ${closeEvent}.", "INFO")
+        if(closeEvent == "Timer") {
+       		log("closeTimerLength = ${closeTimerLength}.", "INFO")
+            log("closeTimerUnit = ${closeTimerUnit}.", "INFO")
+        }
+        if(openEvent == "Timer") {
+        	log("openTimerLength = ${openTimerLength}.", "INFO")
+            log("openTimerUnit = ${openTimerUnit}.", "INFO")
+        }
+        
+        if(lights != null) {
+        	lights.each { it->
+            	log("Light: it.label selected to turn on with valve action.", "INFO")
+            }
+        } else {
+        	log("No lights selected.", "INFO")
+        }
+        
+        if(push) {
+        	log("Push notifications are enabled.", "INFO")
+        } else {
+	        log("Push notifications are disabled.", "INFO")
+        }
+        
+        if(triggerType == "Schedule") {
+        	log("closeTime = ${closeTime}.", "INFO")
+            log("openTime = ${openTime}.", "INFO")
+        }
+        
+        if(testAutomation) {
+        	log("Automation testing is enabled.", "INFO")
+            if(testLights != null) {
+            	log("The following lights are selected for testing this automation.", "INFO")
+            	testLights.each { it->
+                	log("${it.label}", "INFO")
+                }
+            } else {
+            	log("No lights selected for testing.", "WARN")
+            }
+        }
+    }
+    
     if(parent) {
     	if(triggerType == "Water Sensor") {
         	initWaterSensorChild()
@@ -188,6 +251,8 @@ def initialization() {
         	initScheduleChild()
         } else if(triggerType == "Contact") {
         	initContactChild()
+        } else if(triggerType == "Toggle") {
+        	initToggleChild()
         }
     } else {
     	initParent() 
@@ -207,6 +272,12 @@ def initWaterSensorChild() {
     
     unsubscribe()
     
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
+    
     if(waterSensors != null) {
     	waterSensors.each { it->
         	log("Water Sensor ${it.label} selected.", "INFO")
@@ -223,8 +294,14 @@ def initWaterSensorChild() {
 def initSwitchChild() {
 	log("Begin initSwitchChild().", "DEBUG")
     log("active = ${active}.", "INFO")
-
+    
     unsubscribe()
+    
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
     
     if(closeEvent == openEvent) {
     	log("You cannot set the close event and the open event to the same value. Defaulting to close when switch is on and never open valve.", "WARN")
@@ -249,8 +326,31 @@ def initScheduleChild() {
 	log("Begin initScheduleChild().", "DEBUG")
     log("active = ${active}.", "INFO")
     unsubscribe()
+    unschedule()
+    
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
     
     initValves()
+    
+    if(closeTime != null) {
+    	if(testAutomation) {
+        	schedule(closeTime, testLightsOn)
+        } else {
+        	schedule(closeTime, closeValves)
+        }
+    }
+    
+    if(openTime != null) {
+    	if(testAutomation) {
+        	schedule(openTime, testLightsOff)
+        } else {
+        	schedule(openTime, openValves)
+        }
+    }
     
     log("End initScheduleChild().", "DEBUG")
 }
@@ -259,6 +359,12 @@ def initContactChild() {
 	log("Begin initContactChild().", "DEBUG")
     log("active = ${active}.", "INFO")
     unsubscribe()
+    
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
     
     if(closeEvent == openEvent) {
     	log("You cannot set the close event and the open event to the same value. Defaulting to close when contact is opened and never open valve.", "WARN")
@@ -277,6 +383,27 @@ def initContactChild() {
     initValves()
     
     log("End initContactChild().", "DEBUG")
+}
+
+def initToggleChild() {
+	log("Begin initTogglechild().", "DEBUG")
+    log("active = ${active}.", "INFO")
+    log("triggerType = ${triggerType}.", "INFO")
+    
+    unschedule()
+    unsubscribe()
+    
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
+    
+	initValves()
+    log("CRON String = ${getCron(toggleTimerLength, toggleTimerUnit)}.", "DEBUG")
+    schedule(getCron(toggleTimerLength, toggleTimerUnit), toggleValves)
+
+    log("End initTogglechild().", "DEBUG")
 }
 
 def initValves() {
@@ -377,6 +504,11 @@ def closeValves() {
         	state.phrase = "${it.label} is closing"
         	asyncSendPushNotification()
         }
+        
+        if(openEvent == "Timer") {
+        	log("Scheduling the valve to open in ${openTimerLength} ${openTimerUnit}.", "INFO")
+        	runIn(getDuration(openTimerLength, openTimerUnit), openValves)
+        }
     }
 }
 
@@ -388,6 +520,32 @@ def openValves() {
         if(push) {
         	state.phrase = "${it.label} is opening"
         	asyncSendPushNotification()
+        }
+        
+        if(closeEvent == "Timer") {
+        	log("Scheduling the valve to close in ${closeTimerLength} ${closeTimerUnit}.", "INFO")
+        	runIn(getDuration(closeTimerLength, closeTimerUnit), closeValves)
+        }
+    }
+}
+
+def toggleValves() {
+	log("Toggling valves.", "INFO")
+    if(testAutomation) {
+    	testLights.each { it->
+        	if(it.currentValue("switch").toLowerCase() == "on") {
+            	it.off()
+            } else if(it.currentValue("switch").toLowerCase() == "off") {
+            	it.on()
+            }
+        }
+    } else {
+    	valves.each { it->
+        	if(it.currentValue("contact").toLowerCase() == "open") {
+            	closeValves()
+            } else if(it.currentValue("contact").toLowerCase() == "closed") {
+            	openValves()
+            }
         }
     }
 }
@@ -419,6 +577,7 @@ def lightsOff() {
 def testLightsOff() {
     if(testAutomation) {
     	if(testLights != null) {
+        	log("Turning test lights off.", "INFO")
         	testLights.each { it->
             	it.off()
             }
@@ -426,6 +585,11 @@ def testLightsOff() {
         if(push) {
         	state.phrase = "Testing Automation Valve Opening"
         	asyncSendPushNotification()
+        }
+        
+        if(closeEvent == "Timer") {
+        	log("Scheduling the test lights to turn on in ${openTimerLength} ${openTimerUnit} to simulate valve closing.", "INFO")
+        	runIn(getDuration(closeTimerLength, closeTimerUnit), testLightsOn)
         }
     }
 }
@@ -441,5 +605,56 @@ def testLightsOn() {
         	state.phrase = "Testing Automation Valve Closing"
         	asyncSendPushNotification()
         }
+        
+        if(openEvent == "Timer") {
+        	log("Scheduling the test lights to turn off in ${openTimerLength} ${openTimerUnit}.", "INFO")
+        	runIn(getDuration(openTimerLength, openTimerUnit), testLightsOff)
+        }
+    }
+}
+
+def getOpenEvents() {
+	return ["On", "Off", "Never", "Timer"]
+}
+
+def getCloseEvents() {
+	return ["On", "Off", "Never", "Timer"]
+}
+
+def getTimeUnits() {
+	return ["Seconds", "Minutes", "Hours", "Days", "Weeks"]
+}
+
+def getToggleTimeUnits() {
+	return ["Minutes", "Hours", "Days"]
+}
+
+def getDuration(val, unit) {
+	switch(unit) {
+    	case "Seconds":
+        	return 1 * val
+        case "Minutes":
+        	return 60 * val
+        case "Hours":
+        	return 3600 * val
+        case "Days":
+        	return 86400 * val
+        case "Weeks":
+        	return 604800 * val
+        default:
+        	return 60 * val
+    }
+}
+
+def getCron(val, unit) {
+	switch(unit) {
+        case "Minutes":
+        	return "0 0/${val} * 1/1 * ?"
+        case "Hours":
+        	return "0 0 0/${val} 1/1 * ?"
+        case "Days":
+        	return "0 0 0 1/${val} * ?"
+        default:
+        	return "0 0/${val} * 1/1 * ?"
     }
 }
