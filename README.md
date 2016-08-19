@@ -7,37 +7,37 @@ Automations Include:
 
 **Water Sensor** - Most obvious application. 
 
-Example 1: When a water sensor detects water, close the valve.
+- Example 1: When a water sensor detects water, close the valve.
 
 **Contact Sensor** - For each action of a valve (open & close) choose to do either of these based on the current event of a contact sensor, timer, or ignore. 
 
-Example 1: When a contact sensor opens, close the valve. When the contact sensor closes, open the value.
-Example 2: When a contact sensor opens, open the valve. When the contact sensor closes, close the value.
-Example 3: When a contact sensor opens, close the valve. When the contact sensor closes, do nothing.
-Example 4: When a contact sensor opens, close the valve. When the contact sensor closes, open the valve in 5 minutes.
+- Example 1: When a contact sensor opens, close the valve. When the contact sensor closes, open the value.
+- Example 2: When a contact sensor opens, open the valve. When the contact sensor closes, close the value.
+- Example 3: When a contact sensor opens, close the valve. When the contact sensor closes, do nothing.
+- Example 4: When a contact sensor opens, close the valve. When the contact sensor closes, open the valve in 5 minutes.
 
 **Schedule** - Open and close the valve at specific times daily.
 
-Example 1: Open the valve at 8:30 AM daily, close the valve at 9:30 PM daily.
-Example 2: Close the valve at 10:00 PM daily, never open (only manual).
+- Example 1: Open the valve at 8:30 AM daily, close the valve at 9:30 PM daily.
+- Example 2: Close the valve at 10:00 PM daily, never open (only manual).
 
 **Toggle** - Open and close the valve continiously on an interval.
 
-Example 1: Toggle the valve every 5 minutes.
-Example 2: Toggle the valve every 8 hours.
-Example 3: Toggle the valve every 1 day.
+- Example 1: Toggle the valve every 5 minutes.
+- Example 2: Toggle the valve every 8 hours.
+- Example 3: Toggle the valve every 1 day.
 
 **Switch** - For each action of a valve (open & close) choose to do either of these based on the current event of a switch, timer, or ignore. 
 
-Example 1: When a switch is turned on, close the valve. When the switch is turned off, open the value.
-Example 2: When a switch is turned on, open the valve. When the switch is turned off, close the value.
-Example 3: When a switch is turned on, close the valve. When the switch is turned off, do nothing.
-Example 4: When a switch is turned on, close the valve. When the switch is turned off, open the valve in 5 minutes.
+- Example 1: When a switch is turned on, close the valve. When the switch is turned off, open the value.
+- Example 2: When a switch is turned on, open the valve. When the switch is turned off, close the value.
+- Example 3: When a switch is turned on, close the valve. When the switch is turned off, do nothing.
+- Example 4: When a switch is turned on, close the valve. When the switch is turned off, open the valve in 5 minutes.
 
 ## Additional Features
-Lights - Turn specified lights on when a valve closes.
-Push Notifications - Get notified when a valve is told to open or close and when it actually does.
-Testing - Simulation mode allows you to substitute a light for a valve for testing. Valve closed, light on, valve open, light off.
+- Lights - Turn specified lights on when a valve closes.
+- Push Notifications - Get notified when a valve is told to open or close and when it actually does.
+- Testing - Simulation mode allows you to substitute a light for a valve for testing. Valve closed, light on, valve open, light off.
 
 ## Installation via GitHub Integration
 1. Open SmartThings IDE in your web browser and log into your account.
