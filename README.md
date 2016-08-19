@@ -1,7 +1,9 @@
 # ST-Revalver
 
 ## Summary
-Manage your valves with SmartThings like a boss. Revalver allows you to group your valves and control them as a single group or to create smaller groups or control individual valves with different automations. Example automations:
+Manage your valves with SmartThings like a boss. Revalver allows you to group your valves and control them as a single group or to create smaller groups or control individual valves with different automations. 
+
+Automations Include:
 
 **Water Sensor** - Most obvious application. 
 
