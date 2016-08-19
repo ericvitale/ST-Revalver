@@ -69,12 +69,12 @@ def childStartPage() {
             section("Trigger") {
                 input "switches", "capability.switch", title: "Switches", multiple: true, required: false, submitOnChange: true
                 if(switches != null) {
-                    input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: getCloseEvents(), defaultValue: "On", submitOnChange: true
+                    input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: ["On", "Off", "Never", "Timer"], defaultValue: "On", submitOnChange: true
                     if(closeEvent == "Timer") {
                     	input "closeTimerLength", "number", title: "Close After?", required: true, range: "1..*"
                         input "closeTimerUnit", "enum", title: "Unit?", required: true, options: getTimeUnits(), defaultValue: "Minutes"
                     }
-                    input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: getOpenEvents(), defaultValue: "Never", submitOnChange: true
+                    input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: ["On", "Off", "Never", "Timer"], defaultValue: "Never", submitOnChange: true
                     if(openEvent == "Timer") {
                     	input "openTimerLength", "number", title: "Open After?", required: true, range: "1..*"
                         input "openTimerUnit", "enum", title: "Unit?", required: true, options: getTimeUnits(), defaultValue: "Minutes"
@@ -90,8 +90,8 @@ def childStartPage() {
         	section("Contact Sensor Subscriptions") {
             	input "contacts", "capability.contactSensor", title: "Which?", required: false, multiple: true, submitOnChange: true
                 if(contacts != null) {
-            		input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: getCloseEvents(), defaultValue: "Open"
-                	input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: getOpenEvents(), defaultValue: "Never"
+            		input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: ["Open", "Closed", "Never", "Timer"], defaultValue: "Open"
+                	input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: ["Open", "Closed", "Never", "Timer"], defaultValue: "Never"
                 }
             }
         } else if(triggerType == "Toggle") {
