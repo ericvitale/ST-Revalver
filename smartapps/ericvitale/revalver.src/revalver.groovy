@@ -1,6 +1,8 @@
 /**
  *  Revalver
  *
+ *  Version 1.0.2 = 08/22/16
+ *   -- Added: Ability to turn a valve on / off based on a temperature & time period.
  *  Version 1.0.1 - 08/19/16
  *   -- Added: Schedule Trigger
  *   -- Added: Toggle Trigger
@@ -58,7 +60,7 @@ def childStartPage() {
 	return dynamicPage(name: "childStartPage", title: "", install: true, uninstall: true) {
         
         section("Trigger Type") {
-        	input "triggerType", "enum", title: "Trigger Type", required: true, multiple: false, options: ["Contact", "Schedule", "Switch", "Toggle", "Water Sensor"], submitOnChange: true
+        	input "triggerType", "enum", title: "Trigger Type", required: true, multiple: false, options: ["Contact", "Schedule", "Switch", "Temperature", "Toggle", "Water Sensor"], submitOnChange: true
         }
         
         if(triggerType == "Water Sensor") {
@@ -99,6 +101,20 @@ def childStartPage() {
         		input "toggleTimerLength", "number", title: "Toggle Every?", required: true, range: "1..*"
             	input "toggleTimerUnit", "enum", title: "Unit?", required: true, options: getToggleTimeUnits(), defaultValue: "Minutes"
             }
+        } else if(triggerType == "Temperature") {
+        	section("Temperature") {
+            	input "temperatureSensors", "capability.temperatureMeasurement", title: "Which?", required: true, multiple: true, submitOnChange: true
+                if(temperatureSensors != null) {
+                	input "closeEvent", "enum", title: "Close Valve When?", required: true, multiple: false, options: getTemperatureEventList(), submitOnChange: true
+                    if(closeEvent in getTemperatureEventList(false)) {
+                    	input "closeTemperature", "number", title: "Close When ${closeEvent}", required: true, range: "*..*"
+                    }
+                    input "openEvent", "enum", title: "Open Valve When?", required: true, multiple: false, options: getTemperatureEventList(), submitOnChange: true
+					if(openEvent in getTemperatureEventList(false)) {
+                    	input "openTemperature", "number", title: "Open When ${openEvent}", required: true, range: "*..*"
+                    }
+                }
+            }
         }
         
         section("Valves") {
@@ -123,7 +139,25 @@ def childStartPage() {
             }
         }
         
-        section("Setting") {
+        section("Time Range") {
+        	input "useTimeRange", "bool", title: "Use Time Range?", required: true, defaultValue: false, submitOnChange: true
+            if(useTimeRange) {
+            input "startTimeSetting", "enum", title: "Start Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
+            if(startTimeSetting == "Custom") {
+            	input "startTimeInput", "time", title: "Custom Start Time", required: true
+            } else if(startTimeSetting == "Sunrise" || startTimeSetting == "Sunset") {
+            	input "startTimeOffset", "number", title: "Offset ${startTimeType} by (Mins)...", range: "*..*"
+            }
+            input "endTimeSetting", "enum", title: "End Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
+            if(endTimeSetting == "Custom") {
+            	input "endTimeInput", "time", title: "Custom End Time", required: true
+            } else if(endTimeSetting == "Sunrise" || endTimeSetting == "Sunset") {
+            	input "endTimeOffset", "number", title: "Offset ${endTimeType} by (Mins)...", range: "*..*"
+            }
+            }
+        }
+        
+        section("Settings") {
         	label(title: "Assign a name", required: false)
             input "active", "bool", title: "Rules Active?", required: true, defaultValue: true
             input "logging", "enum", title: "Log Level", required: true, defaultValue: "INFO", options: ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
@@ -253,6 +287,8 @@ def initialization() {
         	initContactChild()
         } else if(triggerType == "Toggle") {
         	initToggleChild()
+        } else if(triggerType == "Temperature") {
+        	initTemperatureChild()
         }
     } else {
     	initParent() 
@@ -291,6 +327,42 @@ def initWaterSensorChild() {
     log("End initWaterSensorChild().", "DEBUG")
 }
 
+def initTemperatureChild() {
+	log("Begin initTemperatureChild().", "DEBUG")
+    log("active = ${active}.", "INFO")
+    log("triggerType = ${triggerType}.", "INFO")
+    
+    unsubscribe()
+    
+    if(!active) {
+        log("Application is not active, ignoring further initialization tasks.", "INFO")
+        log("End initialization().", "DEBUG")
+        return
+	}
+    
+    if(triggerType == "Temperature") {
+        log("Temperature sensors selected: ...", "INFO")
+        if(temperatureSensors != null) {
+            def averageTemp = 0.0
+            temperatureSensors.each { it->
+            log("Temperature Sensor: ${it.label} is selected and is currently reading ${it.currentValue("temperature")}.", "INFO")
+                averageTemp += it.currentValue("temperature")
+            }
+
+            averageTemp = (averageTemp / temperatureSensors.size())
+            log("closeEvent = ${closeEvent}.", "INFO")
+            log("closeTemperature = ${closeTemperature}.", "INFO")
+            log("openEvent = ${openEvent}.", "INFO")
+            log("openTemperature = ${openTemperature}.", "INFO")
+            log("Current average temperature is ${averageTemp}.", "INFO")
+        }
+    }
+    
+    initValves()
+
+    log("End initTemperatureChild().", "DEBUG")
+}
+
 def initSwitchChild() {
 	log("Begin initSwitchChild().", "DEBUG")
     log("active = ${active}.", "INFO")
@@ -315,6 +387,10 @@ def initSwitchChild() {
         }
     	subscribe(switches, "switch", switchHandler)
         log("Subscribed to switch events.", "INFO")
+    }
+    
+    if(useTimeRange) {
+    	setupTimes()
     }
     
     initValves()
@@ -426,6 +502,29 @@ def initValves() {
 def switchHandler(evt) {
 	log("Manual switch (${evt.device.label}) -- ${evt.value}.", "INFO")
     
+    
+    if(getUseStartTime() && useTimeRange) {
+    	log("Calculated Start Time: ${getCalculatedStartTime()}.", "INFO")
+    }
+    
+    if(getUseEndTime() && useTimeRange) {
+    	log("Calculated End Time: ${getCalculatedEndTime()}.", "INFO")
+    }
+    
+    if(getUseStartTime() && getUseEndTime() && useTimeRange) {
+    	log("Minutes between: ${minutesBetween(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
+        log("isBefore: ${isBefore(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
+        log("isAfter: ${isAfter(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
+        log("isBetween: ${isBetween(getCalculatedStartTime(), getCalculatedEndTime(), getNow())}.", "DEBUG")
+        
+        if(isBetween(getCalculatedStartTime(), getCalculatedEndTime(), getNow())) {
+        	
+        } else {
+	        log("Out of time range. Ignoring.", "INFO")
+            return
+        }
+    }
+    
     if(evt.value == closeEvent.toLowerCase()) {
     	if(testAutomation) {
         	log("Testing Automation: turning test lights on, simulating a valve closing.", "INFO")
@@ -462,6 +561,13 @@ def waterHandler(evt) {
     }
 }
 
+def temperatureHandler(evt) {
+	log("Temperature event detected for (${evt.device.label}) -- ${evt.value}.", "INFO")
+    log("Event = ${evt.descriptionText}.", "DEBUG")
+    
+	evaluateTemperatures()
+}
+
 def contactHandler(evt) {
 	log("Contact event by (${evt.device.label}) -- ${evt.value}.", "INFO")
     
@@ -495,10 +601,105 @@ def valveHandler(evt) {
     } 
 }
 
+def evaluateTemperatures() {
+    if(temperatureSensors != null) {
+    	def averageTemp = 0.0
+        def belowClose = false
+        def aboveClose = false
+        def belowOpen = false
+        def aboveOpen = false
+        temperatureSensors.each { it->
+	        log("Temperature Sensor: ${it.label} is selected and is currently reading ${it.currentValue("temperature")}.", "INFO")
+        	averageTemp += it.currentValue("temperature")
+            
+            /*if(it.currentValue("temperature") > closeTemperature) {
+            	aboveClose = true
+            } else if(it.currentValue("temperature") <= closeTemperature) {
+            	belowClose = true	
+            }
+            
+            if(it.currentValue("temperature") > openTemperature) {
+            	aboveOpen = true
+            } else if(it.currentValue("temperature") <= openTemperature) {
+            	belowOpen = true	
+            }*/
+		}
+                
+        averageTemp = (averageTemp / temperatureSensors.size())
+        log("closeEvent = ${closeEvent}.", "DEBUG")
+        log("closeTemperature = ${closeTemperature}.", "DEBUG")
+        log("openEvent = ${openEvent}.", "DEBUG")
+        log("openTemperature = ${openTemperature}.", "DEBUG")
+        log("Current average temperature is ${averageTemp}.", "DEBUG")
+	}
+        
+	if(useAverageTemp) {
+    
+    	aboveClose = false
+        belowClose = false
+        
+    	if(averageTemp >= closeTemperature) {
+        	aboveClose = true
+        } else {
+        	belowClose = true
+        }
+    }
+    
+    if(useAverageTemp) {
+    
+        aboveOpen = false
+        belowOpen = false
+        
+        if(averageTemp >= openTemperature) {
+        	aboveOpen = true
+        } else {
+        	belowOpen = true
+        }
+    }
+    
+    if(closeEvent == "Above") {
+    	if(aboveClose == true) {
+			if(testAutomation) {
+            	testLightsOn()
+            } else {
+	            closeValves()
+            }
+        }
+    } else if(closeEvent == "Below") {
+    	if(belowClose == true) {
+			if(testAutomation) {
+            	testLightsOn()
+            } else {
+	            closeValves()
+            }
+        }
+    }
+    
+    if(openEvent == "Above") {
+    	if(aboveOpen == true) {
+			if(testAutomation) {
+            	testLightsOff()
+            } else {
+	            openValves()
+            }
+        }
+    } else if(openEvent == "Below") {
+    	if(belowOpen == true) {
+			if(testAutomation) {
+            	testLightsOff()
+            } else {
+	            openValves()
+            }
+        }
+    }
+}
+
 def closeValves() {
 	log("Closing valves.", "INFO")
     valves.each { it->
-        it.close()
+        //if(it.currentState("contact") == "open") {
+        	it.close()
+        //}
         log("Closing ${it.label} now...", "INFO")
         if(push) {
         	state.phrase = "${it.label} is closing"
@@ -515,7 +716,9 @@ def closeValves() {
 def openValves() {
 	log("Opening valves.", "INFO")
     valves.each { it->
-        it.open()
+        //if(it.currentState("contact") == "closed") {
+	        it.open()
+        //}
         log("Opening ${it.label} now...", "INFO")
         if(push) {
         	state.phrase = "${it.label} is opening"
@@ -629,6 +832,18 @@ def getToggleTimeUnits() {
 	return ["Minutes", "Hours", "Days"]
 }
 
+def getTemperatureEventList() {
+	return getTemperatureEventList(true)
+}
+
+def getTemperatureEventList(val) {
+	if(val == true) {
+    	return ["Above", "Below", "Never"]
+    } else {
+    	return ["Above", "Below"]
+    }
+}
+
 def getDuration(val, unit) {
 	switch(unit) {
     	case "Seconds":
@@ -658,3 +873,215 @@ def getCron(val, unit) {
         	return "0 0/${val} * 1/1 * ?"
     }
 }
+
+//// Begin Time Getters / Setters ////
+def getStartTime() {
+	return state.theStartTime
+}
+
+def setStartTime(val) {
+	state.theStartTime = val
+}
+
+def getEndTime() {
+	return state.theEndTime
+}
+
+def setEndTime(val) {
+	state.theEndTime = val
+}
+
+def getStartTimeType() {
+    return state.theStartTimeSetting
+}
+
+def setStartTimeType(val) {
+    state.theStartTimeSetting = val
+}
+
+def getEndTimeType() {
+    return state.theEndTimeSetting
+}
+
+def setEndTimeType(val) {
+    state.theEndTimeSetting = val
+}
+
+def getStartTimeOffset() {
+	if(state.theStartTimeOffset == null) {
+    	return 0
+    } else {
+    	return state.theStartTimeOffset
+    }
+}
+
+def setStartTimeOffset(val) {
+	if(val == null) {
+    	state.theStartTimeOffset = 0
+    } else {
+    	state.theStartTimeOffset = val
+    }
+}
+
+def getEndTimeOffset() {
+	if(state.theEndTimeOffset == null) {
+    	return 0
+    } else {
+    	return state.theEndTimeOffset
+    }
+}
+
+def setEndTimeOffset(val) {
+	if(val == null) {
+    	state.theEndTimeOffset = 0
+    } else {
+    	state.theEndTimeOffset = val
+    }
+}
+
+def getUseStartTime() {
+	return state.UsingStartTime
+}
+
+def getUseEndTime() {
+	return state.UsingEndTime
+}
+
+def setUseStartTime(val) {
+	state.UsingStartTime = val
+}
+
+def setUseEndTime(val) {
+	state.UsingEndTime = val
+}	
+
+def getCalculatedStartTime() {
+	if(getStartTimeType() == "Custom") {
+    	return inputDateToDate(getStartTime())
+    } else if(getStartTimeType() == "Sunset") {
+    	return getSunset(getStartTimeOffset())
+    } else if(getStartTimeType() == "Sunrise") {
+    	return getSunrise(getStartTimeOffset())
+    }
+}
+
+def getCalculatedEndTime() {
+	if(getEndTimeType() == "Custom") {
+    	return inputDateToDate(getEndTime())
+    } else if(getEndTimeType() == "Sunset") {
+    	return getSunset(getEndTimeOffset())
+    } else if(getEndTimeType() == "Sunrise") {
+    	return getSunrise(getEndTimeOffset())
+    }	
+}
+
+//// End Time Getters / Setters ////
+
+/////// Begin Time / Date Methods ///////////////////////////////////////////////////////////
+
+def setupTimes() {
+	setStartTimeType(startTimeSetting)
+    setEndTimeType(endTimeSetting)
+    
+    if(getStartTimeType() == "None") {
+        setUseStartTime(false)
+    } else if (getStartTimeType() == "Sunrise") {
+    	setUseStartTime(true)
+        setStartTimeOffset(startTimeOffset)
+    } else if (getStartTimeType() == "Sunset") {
+    	setUseStartTime(true)
+        setStartTimeOffset(startTimeOffset)
+    } else if (getStartTimeType() == "Custom") {
+    	setUseStartTime(true)
+        setStartTime(startTimeInput)
+    }
+    
+    if(endTimeType == "None") {
+    	setUseEndTime(false)
+    } else if (endTimeType == "Sunrise") {
+    	setUseEndTime(true)
+        setEndTimeOffset(endTimeOffset)
+    } else if (endTimeType == "Sunset") {
+    	setUseEndTime(true)
+        setEndTimeOffset(endTimeOffset)
+    } else if (endTimeType == "Custom") {
+    	setUseEndTime(true)
+        setEndTime(endTimeInput)
+    }
+}
+
+def getNow() {
+	return new Date()
+}
+
+def minutesBetween(time1, time2) {
+	return (time1.getTime() - time2.getTime())/1000/60
+}
+
+def isBefore(time1, time2) {
+	if(minutesBetween(time1, time2) <= 0) {
+    	return true
+    } else {
+    	return false
+    }
+}
+
+def isAfter(time1, time2) {
+	if(minutesBetween(time1, time2) > 0) {
+    	return true
+    } else {
+    	return false
+    }
+}
+
+def isBetween(time1, time2, time3) {
+	if(isAfter(time1, time2)) {
+        time2 = time2 + 1
+    }
+    
+    if(isAfter(time3, time1) && isBefore(time3, time2)) {
+    	return true
+    } else {
+    	return false
+    }
+}
+
+def getSunset() {
+	return getSunset(0)
+}
+
+def getSunrise() {
+	return getSunrise(0)
+}
+
+def getSunset(offset) {
+	def offsetString = getOffsetString(offset)
+    //log("offsetString - Sunset: ${offset} --> ${offsetString}.", "DEBUG")
+	return getSunriseAndSunset(sunsetOffset: offsetString).sunset
+}
+
+def getSunrise(offset) {
+	def offsetString = getOffsetString(offset)
+    //log("offsetString - Sunrise: ${offset} --> ${offsetString}.", "DEBUG")
+	return getSunriseAndSunset(sunriseOffset: "${offsetString}").sunrise
+}
+
+def getOffsetString(offsetMinutes) {
+	int hours = Math.abs(offsetMinutes) / 60; //since both are ints, you get an int
+	int minutes = Math.abs(offsetMinutes) % 60;
+    def sign = (offsetMinutes >= 0) ? "" : "-"
+	def offsetString = "${sign}${hours.toString().padLeft(2, "0")}:${minutes.toString().padLeft(2, "0")}"
+    //log("offsetString = ${offsetString}.", "DEBUG")
+	return offsetString
+}
+
+def inputDateToDate(val) {
+	return Date.parse("yyyy-MM-dd'T'HH:mm:ss.SSSZ", val)
+}
+
+def dateToString(val) {
+	log("val = ${val}.", "DEBUG")
+	return val.format("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+}
+
+/////// End Time / Date Methods ///////////////////////////////////////////////////////////
