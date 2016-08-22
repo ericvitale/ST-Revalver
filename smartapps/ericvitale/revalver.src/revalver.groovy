@@ -140,20 +140,20 @@ def childStartPage() {
         }
         
         section("Time Range") {
-        	input "useTimeRange", "bool", title: "Use Time Range?", required: true, defaultValue: false, submitOnChange: true
-            if(useTimeRange) {
-            input "startTimeSetting", "enum", title: "Start Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
-            if(startTimeSetting == "Custom") {
-            	input "startTimeInput", "time", title: "Custom Start Time", required: true
-            } else if(startTimeSetting == "Sunrise" || startTimeSetting == "Sunset") {
-            	input "startTimeOffset", "number", title: "Offset ${startTimeType} by (Mins)...", range: "*..*"
-            }
-            input "endTimeSetting", "enum", title: "End Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
-            if(endTimeSetting == "Custom") {
-            	input "endTimeInput", "time", title: "Custom End Time", required: true
-            } else if(endTimeSetting == "Sunrise" || endTimeSetting == "Sunset") {
-            	input "endTimeOffset", "number", title: "Offset ${endTimeType} by (Mins)...", range: "*..*"
-            }
+            input "useTimeRange", "bool", title: "Use Time Range?", required: true, defaultValue: false, submitOnChange: true
+        	if(useTimeRange) {
+                input "startTimeSetting", "enum", title: "Start Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
+                if(startTimeSetting == "Custom") {
+                    input "startTimeInput", "time", title: "Custom Start Time", required: true
+                } else if(startTimeSetting == "Sunrise" || startTimeSetting == "Sunset") {
+                    input "startTimeOffset", "number", title: "Offset ${startTimeSetting} by (Mins)...", range: "*..*"
+                }
+                input "endTimeSetting", "enum", title: "End Time", required: true, defaultValue: "None", options: ["None", "Sunrise", "Sunset", "Custom"], submitOnChange: true
+                if(endTimeSetting == "Custom") {
+                    input "endTimeInput", "time", title: "Custom End Time", required: true
+                } else if(endTimeSetting == "Sunrise" || endTimeSetting == "Sunset") {
+                    input "endTimeOffset", "number", title: "Offset ${endTimeSetting} by (Mins)...", range: "*..*"
+                }
             }
         }
         
@@ -322,6 +322,10 @@ def initWaterSensorChild() {
         log("Subscribed to water sensor events.", "INFO")
     }
     
+    if(useTimeRange) {
+    	setupTimes()
+    }
+    
     initValves()
 
     log("End initWaterSensorChild().", "DEBUG")
@@ -356,6 +360,10 @@ def initTemperatureChild() {
             log("openTemperature = ${openTemperature}.", "INFO")
             log("Current average temperature is ${averageTemp}.", "INFO")
         }
+    }
+    
+    if(useTimeRange) {
+    	setupTimes()
     }
     
     initValves()
@@ -410,6 +418,10 @@ def initScheduleChild() {
         return
 	}
     
+    if(useTimeRange) {
+    	setupTimes()
+    }
+    
     initValves()
     
     if(closeTime != null) {
@@ -456,6 +468,10 @@ def initContactChild() {
         log("Subscribed to contact events.", "INFO")
     }
     
+    if(useTimeRange) {
+    	setupTimes()
+    }
+    
     initValves()
     
     log("End initContactChild().", "DEBUG")
@@ -475,7 +491,12 @@ def initToggleChild() {
         return
 	}
     
+    if(useTimeRange) {
+    	setupTimes()
+    }
+    
 	initValves()
+    
     log("CRON String = ${getCron(toggleTimerLength, toggleTimerUnit)}.", "DEBUG")
     schedule(getCron(toggleTimerLength, toggleTimerUnit), toggleValves)
 
@@ -502,27 +523,9 @@ def initValves() {
 def switchHandler(evt) {
 	log("Manual switch (${evt.device.label}) -- ${evt.value}.", "INFO")
     
-    
-    if(getUseStartTime() && useTimeRange) {
-    	log("Calculated Start Time: ${getCalculatedStartTime()}.", "INFO")
-    }
-    
-    if(getUseEndTime() && useTimeRange) {
-    	log("Calculated End Time: ${getCalculatedEndTime()}.", "INFO")
-    }
-    
-    if(getUseStartTime() && getUseEndTime() && useTimeRange) {
-    	log("Minutes between: ${minutesBetween(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
-        log("isBefore: ${isBefore(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
-        log("isAfter: ${isAfter(getCalculatedStartTime(), getCalculatedEndTime())}.", "DEBUG")
-        log("isBetween: ${isBetween(getCalculatedStartTime(), getCalculatedEndTime(), getNow())}.", "DEBUG")
-        
-        if(isBetween(getCalculatedStartTime(), getCalculatedEndTime(), getNow())) {
-        	
-        } else {
-	        log("Out of time range. Ignoring.", "INFO")
-            return
-        }
+    if(outOfRange()) {
+    	log("Current time is out of range, ignoring.", "INFO")
+        return
     }
     
     if(evt.value == closeEvent.toLowerCase()) {
@@ -549,6 +552,12 @@ def switchHandler(evt) {
 def waterHandler(evt) {
 	log("Water detected by (${evt.device.label}) -- ${evt.value}.", "INFO")
     log("Event = ${evt.descriptionText}.", "DEBUG")
+    
+    if(outOfRange()) {
+    	log("Current time is out of range, ignoring.", "INFO")
+        return
+    }
+    
     if(testAutomation) {
         log("Testing Automation: turning test lights on.", "INFO")
         testLightsOn()
@@ -565,11 +574,21 @@ def temperatureHandler(evt) {
 	log("Temperature event detected for (${evt.device.label}) -- ${evt.value}.", "INFO")
     log("Event = ${evt.descriptionText}.", "DEBUG")
     
+    if(outOfRange()) {
+    	log("Current time is out of range, ignoring.", "INFO")
+        return
+    }
+    
 	evaluateTemperatures()
 }
 
 def contactHandler(evt) {
 	log("Contact event by (${evt.device.label}) -- ${evt.value}.", "INFO")
+    
+    if(outOfRange()) {
+    	log("Current time is out of range, ignoring.", "INFO")
+        return
+    }
     
     if(evt.value == closeEvent.toLowerCase()) {
     	if(testAutomation) {
@@ -697,9 +716,9 @@ def evaluateTemperatures() {
 def closeValves() {
 	log("Closing valves.", "INFO")
     valves.each { it->
-        //if(it.currentState("contact") == "open") {
+        if(it.currentValue("contact") == "open") {
         	it.close()
-        //}
+        }
         log("Closing ${it.label} now...", "INFO")
         if(push) {
         	state.phrase = "${it.label} is closing"
@@ -716,9 +735,9 @@ def closeValves() {
 def openValves() {
 	log("Opening valves.", "INFO")
     valves.each { it->
-        //if(it.currentState("contact") == "closed") {
+        if(it.currentValue("contact") == "closed") {
 	        it.open()
-        //}
+        }
         log("Opening ${it.label} now...", "INFO")
         if(push) {
         	state.phrase = "${it.label} is opening"
@@ -979,6 +998,19 @@ def getCalculatedEndTime() {
 
 /////// Begin Time / Date Methods ///////////////////////////////////////////////////////////
 
+def outOfRange() {
+    if(getUseStartTime() && getUseEndTime() && useTimeRange) {
+        if(isBetween(getCalculatedStartTime(), getCalculatedEndTime(), getNow())) {
+       		return false
+        } else {
+	        return true
+        }
+    } else {
+    	return false
+    }
+}
+
+
 def setupTimes() {
 	setStartTimeType(startTimeSetting)
     setEndTimeType(endTimeSetting)
@@ -1056,13 +1088,11 @@ def getSunrise() {
 
 def getSunset(offset) {
 	def offsetString = getOffsetString(offset)
-    //log("offsetString - Sunset: ${offset} --> ${offsetString}.", "DEBUG")
 	return getSunriseAndSunset(sunsetOffset: offsetString).sunset
 }
 
 def getSunrise(offset) {
 	def offsetString = getOffsetString(offset)
-    //log("offsetString - Sunrise: ${offset} --> ${offsetString}.", "DEBUG")
 	return getSunriseAndSunset(sunriseOffset: "${offsetString}").sunrise
 }
 
@@ -1071,7 +1101,6 @@ def getOffsetString(offsetMinutes) {
 	int minutes = Math.abs(offsetMinutes) % 60;
     def sign = (offsetMinutes >= 0) ? "" : "-"
 	def offsetString = "${sign}${hours.toString().padLeft(2, "0")}:${minutes.toString().padLeft(2, "0")}"
-    //log("offsetString = ${offsetString}.", "DEBUG")
 	return offsetString
 }
 
