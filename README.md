@@ -33,6 +33,8 @@ Automations Include:
 - Example 2: When a switch is turned on, open the valve. When the switch is turned off, close the value.
 - Example 3: When a switch is turned on, close the valve. When the switch is turned off, do nothing.
 - Example 4: When a switch is turned on, close the valve. When the switch is turned off, open the valve in 5 minutes.
+- 
+**Temperature** - Open and close based on a temperature. This is not a finished feature. I also plan to allow you to tie it to a thermostat.
 
 ## Additional Features
 - Lights - Turn specified lights on when a valve closes.
