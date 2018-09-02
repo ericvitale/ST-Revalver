@@ -1,3 +1,5 @@
+# This SmartApp is no longer supported.
+
 # ST-Revalver
 
 ## Summary
